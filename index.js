@@ -40,6 +40,26 @@ async function run() {
       res.send(result);
     });
 
+    app.patch("/users/:id/role", async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body;
+    
+      try {
+        const updatedUser = await userCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role } }
+        );
+        
+        if (updatedUser.modifiedCount === 0) {
+          return res.status(404).json({ message: "User not found or role not updated" });
+        }
+        
+        res.json({ message: "User role updated successfully" });
+      } catch (err) {
+        res.status(500).json({ message: "Error updating user role" });
+      }
+    });
+
     // --------------------
     // Products
     // --------------------
