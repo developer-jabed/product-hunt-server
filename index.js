@@ -43,17 +43,19 @@ async function run() {
     app.patch("/users/:id/role", async (req, res) => {
       const { id } = req.params;
       const { role } = req.body;
-    
+
       try {
         const updatedUser = await userCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { role } }
         );
-        
+
         if (updatedUser.modifiedCount === 0) {
-          return res.status(404).json({ message: "User not found or role not updated" });
+          return res
+            .status(404)
+            .json({ message: "User not found or role not updated" });
         }
-        
+
         res.json({ message: "User role updated successfully" });
       } catch (err) {
         res.status(500).json({ message: "Error updating user role" });
@@ -64,15 +66,81 @@ async function run() {
     // Products
     // --------------------
 
-    app.post("/Products", async (req, res) => {
-      try {
-        const product = req.body;
-        const result = await productCollection.insertOne(product);
-        res.status(200).send(result);
-      } catch (err) {
-        res.status(500).send({ error: "Failed to add product" });
+    app.patch("/Products/:id", async (req, res) => {
+      const id = req.params.id;
+      const { action } = req.body;
+      let status = "";
+
+      if (action === "accept") status = "accepted";
+      else if (action === "reject") status = "rejected";
+      else return res.status(400).send({ message: "Invalid action" });
+
+      const result = await productCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status } }
+      );
+
+      if (result.modifiedCount > 0) {
+        res.send({ message: `Product has been ${status}.` });
+      } else {
+        res.status(404).send({ message: "Product not found or not updated." });
       }
     });
+
+    app.patch("/Products/:id/featured", async (req, res) => {
+      const id = req.params.id;
+      const result = await productCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { isFeatured: true } }
+      );
+
+      if (result.modifiedCount > 0) {
+        res.send({ message: "Product marked as featured." });
+      } else {
+        res.status(404).send({ message: "Product not found or not updated." });
+      }
+    });
+
+    app.post("/Products", async (req, res) => {
+      try {
+        const newProduct = req.body;
+        const result = await productCollection.insertOne(newProduct);
+        res.send(result);
+      } catch (error) {
+        console.error("error inserting food", error);
+        res.status(500).send({ error: "failed to insert Product" });
+      }
+    });
+
+    // Accept or Reject Product
+    app.patch("/Products/:id", async (req, res) => {
+      const { id } = req.params;
+      const { action } = req.body; // "accept" or "reject"
+
+      try {
+        const product = await product.findById(id);
+
+        if (!product || product.status !== "pending") {
+          return res
+            .status(404)
+            .send({ error: "Product not found or already reviewed" });
+        }
+
+        if (action === "accept") {
+          product.status = "approved"; // Set to "approved"
+          await product.save();
+          res.status(200).send({ message: "Product approved" });
+        } else if (action === "reject") {
+          await product.remove(); // Delete product if rejected
+          res.status(200).send({ message: "Product rejected" });
+        } else {
+          res.status(400).send({ error: "Invalid action" });
+        }
+      } catch (error) {
+        res.status(500).send({ error: "Failed to process review" });
+      }
+    });
+
     app.get("/Products", async (req, res) => {
       const { search = "", page = 1, limit = 6 } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -101,11 +169,10 @@ async function run() {
       }
     });
 
-
     app.get("/Products/all", async (req, res) => {
-        const result = await productCollection.find().toArray();
-        res.send(result);
-    })
+      const result = await productCollection.find().toArray();
+      res.send(result);
+    });
 
     app.get("/Products/:id", async (req, res) => {
       const { id } = req.params;
@@ -161,6 +228,8 @@ async function run() {
         res.status(500).send({ error });
       }
     });
+
+    
   } finally {
     // Optional: don't close the connection if running persistently
   }
@@ -168,8 +237,8 @@ async function run() {
 
 run().catch(console.error);
 
-app.get('/', (req, res) => {
-  res.send('Welcome to the best choice server!');
+app.get("/", (req, res) => {
+  res.send("Welcome to the best choice server!");
 });
 app.listen(port, () => {
   console.log(
