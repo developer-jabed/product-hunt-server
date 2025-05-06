@@ -5,7 +5,12 @@ const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
-app.use(cors());
+app.use(
+  cors({
+    origin: ["https://crowd-fund-64305.web.app", "http://localhost:5173"],
+  })
+);
+
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xo1yp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -25,6 +30,7 @@ async function run() {
     const productCollection = client.db("Product-hunt").collection("Products");
     const userCollection = client.db("Product-hunt").collection("Users");
     const reviewCollection = client.db("Product-hunt").collection("reviews");
+    const couponsCollection = client.db("Product-hunt").collection("coupons");
 
     // --------------------
     // Users
@@ -210,6 +216,83 @@ async function run() {
       res.send({ message: "Vote recorded successfully" });
     });
 
+    app.put("/Products/:id/report", async (req, res) => {
+      const { id } = req.params;
+      const { reporterEmail } = req.body;
+
+      if (!ObjectId.isValid(id)) return res.status(400).send("Invalid ID");
+
+      const product = await productCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      if (!product) return res.status(404).send("Product not found");
+
+      if (product.reportedUsers?.includes(reporterEmail)) {
+        return res
+          .status(400)
+          .send({ message: "You already reported this product" });
+      }
+
+      await productCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $push: { reportedUsers: reporterEmail },
+        }
+      );
+
+      res.send({ message: "Report recorded successfully" });
+    });
+
+    app.get("/reported-products", async (req, res) => {
+      try {
+        const reportedProducts = await productCollection
+          .find({ reportedUsers: { $exists: true, $not: { $size: 0 } } })
+          .toArray();
+
+        res.send(reportedProducts);
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Failed to fetch reported products", error });
+      }
+    });
+
+    app.delete("/Products/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await productCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+    // GET /Products/stats
+    app.get("/Products/stats", async (req, res) => {
+      try {
+        const allProducts = await productCollection.find().toArray();
+
+        const statusCounts = {
+          accepted: 0,
+          pending: 0,
+          rejected: 0,
+          notReviewed: 0,
+        };
+
+        allProducts.forEach((product) => {
+          const status = product.status?.toLowerCase();
+
+          if (status === "accepted") statusCounts.accepted++;
+          else if (status === "under review" || status === "pending")
+            statusCounts.pending++;
+          else if (status === "rejected") statusCounts.rejected++;
+          else statusCounts.notReviewed++;
+        });
+
+        res.json(statusCounts);
+      } catch (error) {
+        console.error("Error getting stats:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
     // --------------------
     // Reviews
     // --------------------
@@ -229,7 +312,57 @@ async function run() {
       }
     });
 
-    
+    // Get all coupons
+    app.get("/api/coupons", async (req, res) => {
+      const coupons = await couponsCollection.find().toArray();
+      res.send(coupons);
+    });
+
+    // Add a coupon
+    app.post("/api/coupons", async (req, res) => {
+      const coupon = req.body;
+      const result = await couponsCollection.insertOne(coupon);
+      res.send(result);
+    });
+
+    // Update a coupon
+    app.put("/api/coupons/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedCoupon = req.body;
+
+      const result = await couponsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updatedCoupon }
+      );
+
+      res.send(result);
+    });
+
+    // Delete a coupon
+    app.delete("/api/coupons/:id", async (req, res) => {
+      const { id } = req.params;
+
+      const result = await couponsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+    // Update user subscription status
+    app.put("/api/users/:email", async (req, res) => {
+      const { email } = req.params;
+      const { subscriptionStatus } = req.body; // e.g., "subscribed"
+
+      const result = await userCollection.updateOne(
+        { email },
+        { $set: { subscriptionStatus } }
+      );
+
+      if (result.modifiedCount === 0) {
+        return res.status(400).send("User not found or status already updated");
+      }
+
+      res.send(result);
+    });
   } finally {
     // Optional: don't close the connection if running persistently
   }
