@@ -5,11 +5,7 @@ const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
-app.use(
-  cors({
-    origin: ["https://crowd-fund-64305.web.app", "http://localhost:5173"],
-  })
-);
+app.use(cors());
 
 app.use(express.json());
 
@@ -313,20 +309,20 @@ async function run() {
     });
 
     // Get all coupons
-    app.get("/api/coupons", async (req, res) => {
+    app.get("/coupons", async (req, res) => {
       const coupons = await couponsCollection.find().toArray();
       res.send(coupons);
     });
 
     // Add a coupon
-    app.post("/api/coupons", async (req, res) => {
+    app.post("/coupons", async (req, res) => {
       const coupon = req.body;
       const result = await couponsCollection.insertOne(coupon);
       res.send(result);
     });
 
     // Update a coupon
-    app.put("/api/coupons/:id", async (req, res) => {
+    app.put("/coupons/:id", async (req, res) => {
       const { id } = req.params;
       const updatedCoupon = req.body;
 
@@ -339,7 +335,7 @@ async function run() {
     });
 
     // Delete a coupon
-    app.delete("/api/coupons/:id", async (req, res) => {
+    app.delete("/coupons/:id", async (req, res) => {
       const { id } = req.params;
 
       const result = await couponsCollection.deleteOne({
@@ -348,7 +344,7 @@ async function run() {
       res.send(result);
     });
     // Update user subscription status
-    app.put("/api/users/:email", async (req, res) => {
+    app.put("/users/:email", async (req, res) => {
       const { email } = req.params;
       const { subscriptionStatus } = req.body; // e.g., "subscribed"
 
